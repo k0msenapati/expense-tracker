@@ -1,5 +1,7 @@
-import pandas as pd
+from sqlmodel import select
 
+from database import get_session
+from expense_model import Expense as ExpenseModel
 from expense_schemas import (
     ExpenseByCategory,
     ExpenseCreate,
@@ -9,36 +11,32 @@ from expense_schemas import (
     ExpenseSummary,
 )
 
-expenses = [
-    Expense(
-        id=1,
-        name="Groceries",
-        desc="Weekly groceries",
-        amount=150.0,
-        category=ExpenseCategory.FOOD,
-    ),
-    Expense(
-        id=2,
-        name="Electricity Bill",
-        desc="Monthly electricity bill",
-        amount=75.0,
-        category=ExpenseCategory.UTILITIES,
-    ),
-    Expense(
-        id=3,
-        name="Movie Night",
-        desc="Cinema tickets",
-        amount=30.0,
-        category=ExpenseCategory.ENTERTAINMENT,
-    ),
-]
-
 
 def load_expenses() -> list[Expense]:
-    return expenses
+    with get_session() as session:
+        statement = select(ExpenseModel)
+        results = session.exec(statement).all()
+
+        expenses = []
+        for expense in results:
+            assert expense.id is not None
+
+            expenses.append(
+                Expense(
+                    id=expense.id,
+                    name=expense.name,
+                    desc=expense.desc,
+                    amount=expense.amount,
+                    category=ExpenseCategory(expense.category),
+                )
+            )
+
+        return expenses
 
 
 def summary() -> ExpenseSummary:
+    expenses = load_expenses()
+
     expense_count = len(expenses)
     total_expense = sum(expense.amount for expense in expenses)
     highest_expense = max((expense.amount for expense in expenses), default=0)
@@ -53,6 +51,8 @@ def summary() -> ExpenseSummary:
 
 
 def get_expenses_by_category() -> list[ExpenseByCategory]:
+    expenses = load_expenses()
+
     return [
         ExpenseByCategory(
             category=category,
@@ -65,32 +65,67 @@ def get_expenses_by_category() -> list[ExpenseByCategory]:
 
 
 def get_expense_by_id(expense_id: int) -> Expense | None:
-    for expense in load_expenses():
-        if expense.id == expense_id:
-            return expense
-    return None
+    with get_session() as session:
+        statement = select(ExpenseModel).where(ExpenseModel.id == expense_id)
+        result = session.exec(statement).first()
+
+        if result is None:
+            return None
+
+        assert result.id is not None
+
+        return Expense(
+            id=result.id,
+            name=result.name,
+            desc=result.desc,
+            amount=result.amount,
+            category=ExpenseCategory(result.category),
+        )
 
 
 def add_expense(expense: ExpenseCreate):
-    new_id = max(expense.id for expense in expenses) + 1 if expenses else 1
-    new_expense = Expense(
-        id=new_id,
-        name=expense.name,
-        desc=expense.desc,
-        amount=expense.amount,
-        category=expense.category,
-    )
-    expenses.append(new_expense)
+    with get_session() as session:
+        new_expense = ExpenseModel(
+            name=expense.name,
+            desc=expense.desc,
+            amount=expense.amount,
+            category=expense.category.value,
+        )
+        session.add(new_expense)
+        session.commit()
 
 
-def edit_expense(expense_id: int, expense: ExpenseUpdate):
-    for e in expenses:
-        if e.id == expense_id:
-            for field, value in expense.model_dump(exclude_unset=True).items():
-                setattr(e, field, value)
-            break
+def edit_expense(expense_id: int, data: ExpenseUpdate):
+    with get_session() as session:
+        expense = get_expense_by_id(expense_id)
+
+        if expense is None:
+            return None
+
+        for field, value in data.model_dump(exclude_unset=True).items():
+            setattr(expense, field, value)
+
+        session.commit()
+        session.refresh(expense)
+
+        assert expense.id is not None
+
+        return Expense(
+            id=expense.id,
+            name=expense.name,
+            desc=expense.desc,
+            amount=expense.amount,
+            category=ExpenseCategory(expense.category),
+        )
 
 
 def delete_expense(expense_id: int):
-    global expenses
-    expenses = [expense for expense in expenses if expense.id != expense_id]
+    with get_session() as session:
+        expense = get_expense_by_id(expense_id)
+
+        if expense is None:
+            return False
+
+        session.delete(expense)
+        session.commit()
+        return True

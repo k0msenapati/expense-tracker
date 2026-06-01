@@ -2,8 +2,11 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 
-import expense_service
 from expense_schemas import ExpenseCategory
+from database import create_db
+import expense_service
+
+create_db()
 
 st.set_page_config(page_title="Dashboard", page_icon="💸")
 
@@ -12,6 +15,9 @@ st.title("Expense Tracker Dashboard")
 
 def load_expenses_as_df():
     expenses = expense_service.load_expenses()
+    if len(expenses) == 0:
+        return pd.DataFrame()
+
     df = pd.DataFrame([expense.model_dump() for expense in expenses])
     df["category"] = df["category"].apply(lambda c: c.value)
     return df
@@ -115,6 +121,11 @@ def expense_export(expenses):
 
 
 def dashboard():
+    df = load_expenses_as_df()
+    if df.empty:
+        st.info("No expenses found. Please add some expenses to see the dashboard.")
+        return
+
     summary_cards()
     analytics()
     expense_list()
