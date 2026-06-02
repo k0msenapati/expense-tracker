@@ -10,3 +10,5 @@ wheels/
 .venv
 
 expenses.db
+
+.env

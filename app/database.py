@@ -1,8 +1,17 @@
 from sqlmodel import SQLModel, create_engine, Session
+from dotenv import load_dotenv
+import streamlit as st
+import os
 
-DATABASE_URL = "sqlite:///expenses.db"
+load_dotenv()
 
-engine = create_engine(DATABASE_URL)
+
+@st.cache_resource
+def get_engine():
+    return create_engine(os.getenv("DATABASE_URL", "sqlite:///expenses.db"))
+
+
+engine = get_engine()
 
 
 def get_session():

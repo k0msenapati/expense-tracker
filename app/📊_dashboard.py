@@ -6,7 +6,9 @@ from expense_schemas import ExpenseCategory
 from database import create_db
 import expense_service
 
-create_db()
+if "db_initialized" not in st.session_state:
+    create_db()
+    st.session_state["db_initialized"] = True
 
 st.set_page_config(page_title="Dashboard", page_icon="💸")
 
