@@ -124,6 +124,8 @@ def dashboard():
     df = load_expenses_as_df()
     if df.empty:
         st.info("No expenses found. Please add some expenses to see the dashboard.")
+        if st.button("Add Expense"):
+            st.switch_page("pages/2_➕_add_expense.py")
         return
 
     summary_cards()

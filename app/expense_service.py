@@ -1,6 +1,6 @@
 from sqlmodel import select
 
-from database import get_session
+from database import get_session, Session
 from expense_model import Expense as ExpenseModel
 from expense_schemas import (
     ExpenseByCategory,
@@ -64,23 +64,11 @@ def get_expenses_by_category() -> list[ExpenseByCategory]:
     ]
 
 
-def get_expense_by_id(expense_id: int) -> Expense | None:
-    with get_session() as session:
-        statement = select(ExpenseModel).where(ExpenseModel.id == expense_id)
-        result = session.exec(statement).first()
+def get_expense_by_id(session: Session, expense_id: int) -> ExpenseModel | None:
+    statement = select(ExpenseModel).where(ExpenseModel.id == expense_id)
+    result = session.exec(statement).first()
 
-        if result is None:
-            return None
-
-        assert result.id is not None
-
-        return Expense(
-            id=result.id,
-            name=result.name,
-            desc=result.desc,
-            amount=result.amount,
-            category=ExpenseCategory(result.category),
-        )
+    return result
 
 
 def add_expense(expense: ExpenseCreate):
@@ -97,12 +85,15 @@ def add_expense(expense: ExpenseCreate):
 
 def edit_expense(expense_id: int, data: ExpenseUpdate):
     with get_session() as session:
-        expense = get_expense_by_id(expense_id)
+        expense = get_expense_by_id(session, expense_id)
 
         if expense is None:
             return None
 
         for field, value in data.model_dump(exclude_unset=True).items():
+            if isinstance(value, ExpenseCategory):
+                value = value.value
+
             setattr(expense, field, value)
 
         session.commit()
@@ -121,7 +112,7 @@ def edit_expense(expense_id: int, data: ExpenseUpdate):
 
 def delete_expense(expense_id: int):
     with get_session() as session:
-        expense = get_expense_by_id(expense_id)
+        expense = get_expense_by_id(session, expense_id)
 
         if expense is None:
             return False
